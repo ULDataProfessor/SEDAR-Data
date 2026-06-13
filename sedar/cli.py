@@ -10,7 +10,6 @@ import click
 
 from sedar.compliance import ComplianceError, verify_authorization_file
 from sedar.config import get_settings
-from sedar.legacy.scrape import load_filings as legacy_load_filings
 from sedar.sedarplus.download import download_batch
 from sedar.sedarplus.issuers import sync_reporting_issuers
 from sedar.sedarplus.parsers import map_company_record, map_document_record, parse_csv_export
@@ -159,7 +158,9 @@ def legacy_scrape_cmd(i_know_this_is_legacy: bool) -> None:
         )
         sys.exit(1)
     click.echo("WARNING: legacy scraper targets pre-SEDAR+ endpoints and may not work.")
-    legacy_load_filings()
+    from sedar.legacy.scrape import load_filings
+
+    load_filings()
 
 
 if __name__ == "__main__":

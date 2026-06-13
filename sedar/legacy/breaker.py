@@ -3,10 +3,10 @@ import subprocess
 import time
 from tempfile import NamedTemporaryFile
 from typing import List
+from urllib.parse import urljoin
 
 import requests
 from lxml import html
-from urllib.parse import urljoin
 
 CHALLENGE = "http://www.sedar.com/GetFile.do?lang=EN&docClass=13&issuerNo=00020297&fileName=/foo"
 RESPONSE = "http://www.sedar.com/CheckCode.do"

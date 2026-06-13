@@ -8,7 +8,13 @@ from typing import Generator
 
 from playwright.sync_api import Browser, BrowserContext, Page, Playwright, sync_playwright
 
-from sedar.compliance import AuditLogger, BotChallengeError, RateLimiter, detect_bot_challenge, get_audit_logger
+from sedar.compliance import (
+    AuditLogger,
+    BotChallengeError,
+    RateLimiter,
+    detect_bot_challenge,
+    get_audit_logger,
+)
 from sedar.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
@@ -42,9 +48,10 @@ class SedarPlusBrowser:
         self.settings.browser_state_dir.mkdir(parents=True, exist_ok=True)
         self._playwright = sync_playwright().start()
         self._browser = self._playwright.chromium.launch(headless=self.headless)
+        state_path = self._storage_state_path()
         self._context = self._browser.new_context(
             accept_downloads=True,
-            storage_state=self._storage_state_path() if self._storage_state_path().exists() else None,
+            storage_state=state_path if state_path.exists() else None,
         )
         self.page = self._context.new_page()
         return self.page

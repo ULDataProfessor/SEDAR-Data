@@ -8,4 +8,4 @@ warnings.warn(
     stacklevel=2,
 )
 
-from sedar.legacy.breaker import *  # noqa: F403
+from sedar.legacy.breaker import *  # noqa: E402, F403

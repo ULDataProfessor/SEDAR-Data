@@ -61,7 +61,8 @@ def download_batch(
         for filing in pending[:batch_size]:
             url = filing.get("download_url")
             if not url:
-                logger.warning("Skipping filing without download_url: %s", filing.get("document_id"))
+                doc_id = filing.get("document_id")
+                logger.warning("Skipping filing without download_url: %s", doc_id)
                 continue
             if not url.startswith("http"):
                 url = f"{cfg.base_url.rstrip('/')}/{url.lstrip('/')}"
@@ -96,11 +97,15 @@ def download_batch(
                 saved = True
             else:
                 # Some document pages expose a direct PDF viewer; persist rendered content.
-                pdf_link = active_browser.page.locator("a[href*='.pdf'], embed[type='application/pdf']")
+                pdf_link = active_browser.page.locator(
+                    "a[href*='.pdf'], embed[type='application/pdf']"
+                )
                 if pdf_link.count():
                     href = pdf_link.first.get_attribute("href")
                     if href:
-                        active_browser.goto(href if href.startswith("http") else f"{cfg.base_url}{href}")
+                        if not href.startswith("http"):
+                            href = f"{cfg.base_url}{href}"
+                        active_browser.goto(href)
                         with active_browser.page.expect_download(timeout=120_000) as download_info:
                             active_browser.page.keyboard.press("Control+S")
                         download = download_info.value

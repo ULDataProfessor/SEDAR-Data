@@ -20,7 +20,6 @@ from sedar.sedarplus.parsers import (
 )
 from sedar.storage.engine import Storage
 
-
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
@@ -128,7 +127,7 @@ def test_storage_upsert(settings):
     storage.ping()
 
 
-def test_import_csv_cli(settings, tmp_path, runner):
+def test_import_csv_cli(settings, tmp_path):
     from click.testing import CliRunner
 
     from sedar.cli import main

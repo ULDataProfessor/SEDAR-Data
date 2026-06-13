@@ -37,11 +37,20 @@ PARAMS: Dict[str, str | int] = {
     "Variable": "Issuer",
 }
 
-# Database connection
-engine = dataset.connect("postgresql://localhost/sedar")
-filing = engine["filing"]
-company = engine["company"]
+# Database connection (lazy — avoids import-time PostgreSQL requirement)
+_engine = None
+_filing = None
+_company = None
 sess: dict[str, requests.Session | None] = {}
+
+
+def _get_tables():
+    global _engine, _filing, _company
+    if _engine is None:
+        _engine = dataset.connect("postgresql://localhost/sedar")
+        _filing = _engine["filing"]
+        _company = _engine["company"]
+    return _filing, _company
 
 
 def chomp_name(key: str) -> str:
@@ -60,6 +69,7 @@ def get_company(url: str) -> None:
 
     :param url: Url to the company's page
     """
+    filing, company = _get_tables()
     if company.find_one(url=url):
         return
     res = requests.get(url)
@@ -112,6 +122,7 @@ def load_filings() -> None:
     """
     Loads filings from a page until no more filings are found.
     """
+    filing, company = _get_tables()
     for i in count(1):
         page_hits = 0
         params = PARAMS.copy()
