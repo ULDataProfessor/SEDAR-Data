@@ -1,2 +1,11 @@
 filings/*
 *.pyc
+__pycache__/
+.env
+.sedar/
+*.db
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/

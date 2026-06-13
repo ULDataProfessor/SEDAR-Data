@@ -1,0 +1,10 @@
+Example authorization placeholder.
+
+Replace this file with your written ASC/CSA authorization document before running
+live SEDAR+ commands with --confirm-authorized.
+
+Document should include:
+- Permitted use scope
+- Rate and volume limits agreed with the regulator or licensor
+- Retention and redistribution restrictions
+- Contact information for the authorizing party

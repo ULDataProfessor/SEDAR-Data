@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sedar"
+version = "1.0.0"
+description = "Authorized SEDAR+ filing collection with legacy SEDAR reference code"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "SEDAR Contributors" }]
+dependencies = [
+    "click>=8.1",
+    "dataset>=1.6",
+    "httpx>=0.27",
+    "lxml>=5.0",
+    "playwright>=1.40",
+    "pydantic-settings>=2.0",
+    "python-slugify>=8.0",
+    "requests>=2.31",
+    "sqlalchemy>=2.0",
+    "werkzeug>=3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-playwright>=0.4",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+sedar = "sedar.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sedar*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

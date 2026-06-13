@@ -98,6 +98,32 @@ Use one of these paths for current work:
 If authorized access is obtained later, document the permission, permitted use,
 rate limits, retention rules, and redistribution limits before writing code.
 
+## Authorization Checklist
+
+Before running live SEDAR+ automation with this repository, confirm all of the
+following:
+
+1. **Written permission** — You hold current written authorization from the ASC/CSA
+   or a licensed data provider that permits your intended use.
+2. **Scope** — The authorization covers search, download, storage, and any
+   redistribution you plan to perform.
+3. **Volume limits** — You documented agreed rate and volume limits. The CLI enforces
+   the public 30-document download batch cap; stay within any stricter contractual
+   limits.
+4. **Retention** — You defined how long filings and metadata may be kept and when
+   they must be deleted.
+5. **Redistribution** — You confirmed whether derived databases, APIs, or republished
+   files are permitted.
+6. **Audit trail** — You configured logging and can demonstrate what was collected,
+   when, and under which authorization file (`SEDAR_AUTHORIZATION_FILE`).
+7. **Bot challenges** — You have a process for manual CAPTCHA completion in headed
+   browser mode when Radware protection triggers (`SEDAR_HEADLESS=false`).
+8. **Contact** — You recorded the CSA Service Desk or licensor contact for
+   escalation if access is suspended.
+
+Store the authorization document at the path referenced by `SEDAR_AUTHORIZATION_FILE`
+and pass `--confirm-authorized` only after the checklist is complete.
+
 ## Official Sources
 
 - [About SEDAR+](https://systems.securities-administrators.ca/onlinehelp/general-help/about-sedar-plus/)

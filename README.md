@@ -1,47 +1,116 @@
-# Legacy SEDAR Scraper
+# SEDAR+ Filing Collection
 
-This repository contains historical Python code for working with the legacy
-SEDAR website at `sedar.com`. It is not a current SEDAR+ scraper, and it should
-not be used as a template for automated access to SEDAR+ without written
-authorization.
+Python tooling for **authorized** collection of Canadian securities filings from
+[SEDAR+](https://www.sedarplus.ca), with legacy pre-2023 `sedar.com` code preserved
+for reference.
 
-SEDAR+ replaced legacy SEDAR on July 25, 2023. The current SEDAR+ public site is
-designed around browser-based search and download workflows, and its terms place
-material restrictions on scraping, automated searching, database reconstruction,
-and mass redistribution of public information. For background, see
-[SEDAR+, EDGAR, and public data access](docs/sedar-plus-and-data-access.md).
+SEDAR+ has no official public API. This project uses Playwright browser automation
+against the public UI, with compliance gates, rate limiting, and audit logging. Do
+not run live commands without written authorization — see
+[docs/sedar-plus-and-data-access.md](docs/sedar-plus-and-data-access.md).
 
-## Current Status
+## Quick Start
 
-- Historical and educational code only.
-- Targets legacy `http://www.sedar.com` endpoints, including
-  `FindCompanyDocuments.do` and `GetFile.do`.
-- Includes code intended to pass old CAPTCHA and terms-of-use screens.
-- Does not implement SEDAR+ search, SEDAR+ downloads, or any authorized SEDAR+
-  data feed.
-- No SEDAR+ automation should be added unless the project first obtains and
-  documents permission or a licensed data-access path.
+```bash
+# Install package and Playwright browser
+make setup
 
-## Repository Contents
+# Copy and edit configuration
+cp .env.example .env
+# Set SEDAR_AUTHORIZATION_FILE to your authorization document
 
-- `scrape.py` - legacy scraper logic for company document search, document
-  download, and local PostgreSQL storage.
-- `breaker.py` - legacy OCR/CAPTCHA helper used by the old scraper flow.
-- `captcha/` - sample CAPTCHA image files used by the legacy helper.
+# Verify configuration
+sedar check-auth
 
-The code is preserved to document how the old approach worked. It may not run
-against current systems and may require missing dependencies or repairs if used
-in an isolated historical test environment.
+# Live commands require explicit authorization
+sedar sync-issuers --confirm-authorized
+sedar search-docs --profile "Example Corp." --confirm-authorized
+sedar download --limit 30 --confirm-authorized
 
-## Data Access Guidance
+# Import a manual CSV export (no live browser)
+sedar import-csv exports/documents.csv --kind documents
+```
 
-For current Canadian issuer filings, use the public SEDAR+ website manually,
-contact the CSA Service Desk for available archive options, use a licensed data
-vendor, or obtain written permission for any automated access pattern.
+## Configuration
 
-For comparison, the U.S. SEC EDGAR system publishes official public APIs, index
-files, bulk downloads, and fair-access rules. SEDAR+ does not currently expose
-an equivalent documented public bulk API for unrestricted automated collection.
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DATABASE_URL` | PostgreSQL or SQLite connection | `sqlite:///sedar.db` |
+| `SEDAR_AUTHORIZATION_FILE` | Path to authorization document | `./docs/authorization.example.txt` |
+| `SEDAR_CONFIRM_AUTHORIZED` | Opt-in for live automation (`1`/`0`) | `0` |
+| `SEDAR_RATE_LIMIT_SECONDS` | Delay between browser actions | `4` |
+| `SEDAR_DOWNLOAD_DIR` | Local filing storage | `./filings` |
+| `SEDAR_HEADLESS` | Headless browser (`false` for manual CAPTCHA) | `true` |
+| `SEDAR_MAX_DOWNLOAD_BATCH` | Max documents per batch | `30` |
 
-This repository is not legal advice. Review the current SEDAR+ terms and any
-applicable laws before collecting, storing, or redistributing filing data.
+## CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `sedar check-auth` | Verify authorization file and database |
+| `sedar sync-issuers` | Sync reporting issuers list |
+| `sedar search-docs` | Search documents and store metadata |
+| `sedar download` | Download pending filings (max 30) |
+| `sedar import-csv` | Import manual SEDAR+ CSV export |
+| `sedar legacy-scrape` | Historical legacy scraper (deprecated) |
+
+## Project Layout
+
+```
+sedar/
+  cli.py                 # CLI entry point
+  config.py              # Settings
+  compliance.py          # Authorization and rate limits
+  storage/               # PostgreSQL / SQLite via dataset
+  sedarplus/             # Playwright client (search, download, issuers)
+  legacy/                # Pre-SEDAR+ scraper and CAPTCHA helper
+docs/                    # Data access guidance and authorization checklist
+tests/                   # Fixture-based unit tests
+```
+
+## Storage
+
+Metadata is stored in `company`, `filing`, and `sync_run` tables. Filings are saved
+under `SEDAR_DOWNLOAD_DIR/{profile_id}/{document_id}/`.
+
+Use PostgreSQL for production:
+
+```
+DATABASE_URL=postgresql://localhost/sedar
+```
+
+Use SQLite for local development:
+
+```
+DATABASE_URL=sqlite:///sedar.db
+```
+
+## Legacy Code
+
+The original legacy `sedar.com` scraper lives in `sedar/legacy/`. Root `scrape.py`
+and `breaker.py` are deprecation shims. Legacy endpoints were replaced by SEDAR+ in
+July 2023 and are not maintained for current use.
+
+## Known Limits
+
+- **30 documents** per public download batch
+- **50 profiles** max per document search
+- **Radware bot protection** may require headed browser and manual CAPTCHA
+- **No official SEDAR+ API** — UI automation may break when the site changes
+
+## Development
+
+```bash
+make test    # pytest
+make lint    # ruff check
+make format  # ruff format
+```
+
+CI runs lint and tests without live SEDAR+ access.
+
+## Disclaimer
+
+This tool is for authorized research and operational use only. Review the current
+[SEDAR+ Terms of Use](https://systems.securities-administrators.ca/terms-of-use/)
+before collecting, storing, or redistributing filing data. This repository is not
+legal advice.
