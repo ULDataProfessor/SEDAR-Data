@@ -22,6 +22,12 @@ BOT_CHALLENGE_MARKERS = (
     "blocked activity",
 )
 
+UNAVAILABLE_MARKERS = (
+    "scheduled maintenance",
+    "temporarily unavailable due to planned system maintenance",
+    "n'est pas disponible en raison d'une maintenance",
+)
+
 
 class ComplianceError(Exception):
     """Raised when compliance requirements are not met."""
@@ -29,6 +35,10 @@ class ComplianceError(Exception):
 
 class BotChallengeError(ComplianceError):
     """Raised when SEDAR+ bot protection blocks automation."""
+
+
+class SEDARUnavailableError(ComplianceError):
+    """Raised when SEDAR+ reports maintenance or temporary unavailability."""
 
 
 class AuditLogger:
@@ -118,9 +128,7 @@ def enforce_download_limit(requested: int, max_batch: int = MAX_DOWNLOAD_BATCH) 
 
 def enforce_profile_limit(count: int, max_profiles: int = MAX_PROFILES_PER_SEARCH) -> None:
     if count > max_profiles:
-        raise ComplianceError(
-            f"Search includes {count} profiles; SEDAR+ limit is {max_profiles}."
-        )
+        raise ComplianceError(f"Search includes {count} profiles; SEDAR+ limit is {max_profiles}.")
 
 
 def detect_bot_challenge(page_text: str, url: str = "") -> None:
@@ -130,4 +138,14 @@ def detect_bot_challenge(page_text: str, url: str = "") -> None:
         raise BotChallengeError(
             "SEDAR+ bot protection detected. Re-run with SEDAR_HEADLESS=false, "
             "complete the CAPTCHA manually in the browser, then retry."
+        )
+
+
+def detect_unavailable(page_text: str, url: str = "") -> None:
+    lowered = page_text.lower()
+    if any(marker in lowered for marker in UNAVAILABLE_MARKERS):
+        get_audit_logger().log("sedar_unavailable", url=url)
+        raise SEDARUnavailableError(
+            "SEDAR+ is reporting scheduled maintenance or temporary unavailability. "
+            "Retry after the public site is available."
         )

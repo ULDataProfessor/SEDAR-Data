@@ -13,6 +13,7 @@ from sedar.compliance import (
     BotChallengeError,
     RateLimiter,
     detect_bot_challenge,
+    detect_unavailable,
     get_audit_logger,
 )
 from sedar.config import Settings, get_settings
@@ -97,6 +98,7 @@ class SedarPlusBrowser:
             content = self.page.content()
         except Exception as exc:
             raise BotChallengeError(f"Could not read page content for {url}: {exc}") from exc
+        detect_unavailable(content, url)
         detect_bot_challenge(content, url)
 
     def click_text(self, text: str, *, exact: bool = False) -> None:
@@ -107,12 +109,49 @@ class SedarPlusBrowser:
         self.page.get_by_role("button", name=text, exact=exact).click(timeout=30_000)
         self._check_page(self.page.url)
 
-    def fill_label(self, label: str, value: str) -> None:
+    def fill_label(self, label: str, value: str, *, index: int = 0) -> None:
         if self.page is None:
             raise RuntimeError("Browser not started")
         self.rate_limiter.wait()
         self.audit.log("fill", label=label, value=value)
-        self.page.get_by_label(label, exact=False).fill(value, timeout=30_000)
+        self.page.get_by_label(label, exact=False).nth(index).fill(value, timeout=30_000)
+
+    def fill_first_available_label(
+        self,
+        labels: tuple[str, ...],
+        value: str,
+        *,
+        index: int = 0,
+    ) -> bool:
+        if self.page is None:
+            raise RuntimeError("Browser not started")
+        for label in labels:
+            locator = self.page.get_by_label(label, exact=False)
+            if locator.count() <= index:
+                continue
+            self.fill_label(label, value, index=index)
+            return True
+        return False
+
+    def click_first_available(
+        self,
+        labels: tuple[str, ...],
+        *,
+        roles: tuple[str, ...] = ("button", "link"),
+    ) -> bool:
+        if self.page is None:
+            raise RuntimeError("Browser not started")
+        for label in labels:
+            for role in roles:
+                locator = self.page.get_by_role(role, name=label, exact=False)
+                if locator.count() == 0:
+                    continue
+                self.rate_limiter.wait()
+                self.audit.log("click", role=role, text=label)
+                locator.first.click(timeout=30_000)
+                self._check_page(self.page.url)
+                return True
+        return False
 
     def wait_for_results(self, timeout_ms: int = 60_000) -> None:
         if self.page is None:

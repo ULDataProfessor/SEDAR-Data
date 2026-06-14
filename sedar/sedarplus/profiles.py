@@ -1,4 +1,4 @@
-"""Reporting issuers list sync."""
+"""SEDAR+ profile search automation."""
 
 from __future__ import annotations
 
@@ -13,16 +13,33 @@ from sedar.storage.engine import Storage
 
 logger = logging.getLogger(__name__)
 
+PROFILE_QUERY_LABELS = (
+    "Search for profiles",
+    "Profile name or number",
+    "Profile name",
+    "Name",
+    "Profile number",
+)
 SEARCH_BUTTON_LABELS = ("Search", "Apply", "Run search")
 
 
 def _click_search(browser: SedarPlusBrowser) -> None:
-    browser.click_first_available(SEARCH_BUTTON_LABELS, roles=("button",))
+    if browser.click_first_available(SEARCH_BUTTON_LABELS, roles=("button",)):
+        return
+    raise RuntimeError("Could not find search button on SEDAR+ profile page")
 
 
-def sync_reporting_issuers(
+def _collect_page_results(browser: SedarPlusBrowser) -> list[dict[str, Any]]:
+    csv_content = browser.export_csv_content()
+    if csv_content:
+        return parse_csv_export(csv_content)
+    return parse_results_table(browser.page_html())
+
+
+def search_profiles(
     *,
-    max_pages: int = 50,
+    query: str | None = None,
+    max_pages: int = 1,
     confirm_authorized: bool = False,
     settings: Settings | None = None,
     storage: Storage | None = None,
@@ -32,8 +49,8 @@ def sync_reporting_issuers(
     store = storage or Storage(cfg)
     require_live_access(confirm_authorized=confirm_authorized, settings=cfg)
 
-    run_id = store.start_sync_run("sync_issuers")
-    synced: list[dict[str, Any]] = []
+    run_id = store.start_sync_run("search_profiles")
+    collected: list[dict[str, Any]] = []
     errors = ""
 
     own_browser = browser is None
@@ -42,28 +59,25 @@ def sync_reporting_issuers(
         active_browser.start()
 
     try:
-        active_browser.goto_service("searchReportingIssuers")
+        active_browser.goto_service("searchIndustryParticipant")
+        if query:
+            active_browser.fill_first_available_label(PROFILE_QUERY_LABELS, query)
         _click_search(active_browser)
 
         for page_num in range(1, max_pages + 1):
             try:
                 active_browser.wait_for_results()
             except Exception:
-                logger.debug("Issuer results table not found on page %s", page_num)
+                logger.debug("Profile results table not found on page %s", page_num)
 
-            csv_content = active_browser.export_csv_content()
-            rows = (
-                parse_csv_export(csv_content)
-                if csv_content
-                else parse_results_table(active_browser.page_html())
-            )
+            rows = _collect_page_results(active_browser)
             if not rows:
                 break
 
             for row in rows:
                 mapped = map_company_record(row)
                 store.upsert_company(mapped)
-                synced.append(mapped)
+                collected.append(mapped)
 
             if page_num >= max_pages:
                 break
@@ -79,8 +93,8 @@ def sync_reporting_issuers(
         errors = str(exc)
         raise
     finally:
-        store.finish_sync_run(run_id, len(synced), errors)
+        store.finish_sync_run(run_id, len(collected), errors)
         if own_browser:
             active_browser.stop()
 
-    return synced
+    return collected

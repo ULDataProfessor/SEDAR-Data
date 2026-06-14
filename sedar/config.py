@@ -5,6 +5,14 @@ from pathlib import Path
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+SEDAR_PLUS_SERVICES = {
+    "searchIndustryParticipant": ("csa-party", "searchIndustryParticipant", "csa-party"),
+    "searchDocuments": ("csa-party", "searchDocuments", "csa-party"),
+    "searchReportingIssuers": ("csa-party", "searchReportingIssuers", "csa-party"),
+    "searchDisciplinedList": ("csa-order", "searchDisciplinedList", "csa-order"),
+    "searchCeaseTradeOrders": ("csa-order", "searchCeaseTradeOrders", "csa-order"),
+}
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -45,10 +53,14 @@ class Settings(BaseSettings):
     def service_url(self) -> str:
         return f"{self.base_url.rstrip('/')}/csa-party/service/create.html"
 
-    def service_link(self, service: str) -> str:
+    def service_link(self, service: str, *, target_app_code: str | None = None) -> str:
+        app_path, service_name, app_code = SEDAR_PLUS_SERVICES.get(
+            service,
+            ("csa-party", service, target_app_code or "csa-party"),
+        )
         return (
-            f"{self.service_url}?service={service}"
-            f"&targetAppCode=csa-party&_locale={self.locale}"
+            f"{self.base_url.rstrip('/')}/{app_path}/service/create.html"
+            f"?_locale={self.locale}&service={service_name}&targetAppCode={app_code}"
         )
 
 

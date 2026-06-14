@@ -14,43 +14,65 @@ from sedar.storage.engine import Storage
 
 logger = logging.getLogger(__name__)
 
+PROFILE_LABELS = (
+    "Search for profiles",
+    "Profile name or number",
+    "Profile name",
+    "Profile",
+    "Issuer",
+)
+DOCUMENT_QUERY_LABELS = (
+    "Document type",
+    "Document name",
+    "Document content search",
+    "Keywords",
+    "Search",
+)
+FROM_DATE_LABELS = (
+    "From date",
+    "Date submitted from",
+    "Start date",
+)
+TO_DATE_LABELS = (
+    "To date",
+    "Date submitted to",
+    "End date",
+)
+SEARCH_BUTTON_LABELS = ("Search", "Apply", "Run search")
+
 
 def _click_search(browser: SedarPlusBrowser) -> None:
-    for label in ("Search", "Apply", "Run search"):
-        if browser.page and browser.page.get_by_role("button", name=label, exact=False).count():
-            browser.click_text(label)
-            return
+    if browser.click_first_available(SEARCH_BUTTON_LABELS, roles=("button",)):
+        return
     raise RuntimeError("Could not find search button on SEDAR+ page")
+
+
+def _fill_profile_filters(browser: SedarPlusBrowser, profiles: list[str]) -> None:
+    for index, profile in enumerate(profiles):
+        if index > 0:
+            browser.click_first_available(("Add another", "Add profile"), roles=("button",))
+        if browser.fill_first_available_label(PROFILE_LABELS, profile, index=index):
+            continue
+        if index == 0:
+            break
 
 
 def _fill_optional_filters(
     browser: SedarPlusBrowser,
     *,
-    profile: str | None,
+    profiles: list[str],
     query: str | None,
     from_date: date | None,
     to_date: date | None,
 ) -> None:
-    if profile:
-        for label in ("Profile name or number", "Profile", "Issuer"):
-            if browser.page and browser.page.get_by_label(label, exact=False).count():
-                browser.fill_label(label, profile)
-                break
+    if profiles:
+        _fill_profile_filters(browser, profiles)
     if query:
-        for label in ("Document name", "Keywords", "Search"):
-            if browser.page and browser.page.get_by_label(label, exact=False).count():
-                browser.fill_label(label, query)
-                break
+        browser.fill_first_available_label(DOCUMENT_QUERY_LABELS, query)
     if from_date:
-        for label in ("From date", "Start date"):
-            if browser.page and browser.page.get_by_label(label, exact=False).count():
-                browser.fill_label(label, from_date.isoformat())
-                break
+        browser.fill_first_available_label(FROM_DATE_LABELS, from_date.isoformat())
     if to_date:
-        for label in ("To date", "End date"):
-            if browser.page and browser.page.get_by_label(label, exact=False).count():
-                browser.fill_label(label, to_date.isoformat())
-                break
+        browser.fill_first_available_label(TO_DATE_LABELS, to_date.isoformat())
 
 
 def _collect_page_results(browser: SedarPlusBrowser) -> list[dict[str, Any]]:
@@ -91,22 +113,13 @@ def search_documents(
 
     try:
         active_browser.goto_service("searchDocuments")
-        if profile_list:
-            _fill_optional_filters(
-                active_browser,
-                profile=", ".join(profile_list[: cfg.max_profiles_per_search]),
-                query=query,
-                from_date=from_date,
-                to_date=to_date,
-            )
-        else:
-            _fill_optional_filters(
-                active_browser,
-                profile=None,
-                query=query,
-                from_date=from_date,
-                to_date=to_date,
-            )
+        _fill_optional_filters(
+            active_browser,
+            profiles=profile_list[: cfg.max_profiles_per_search],
+            query=query,
+            from_date=from_date,
+            to_date=to_date,
+        )
         _click_search(active_browser)
 
         for page_num in range(1, max_pages + 1):

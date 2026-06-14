@@ -13,6 +13,7 @@ from sedar.config import get_settings
 from sedar.sedarplus.download import download_batch
 from sedar.sedarplus.issuers import sync_reporting_issuers
 from sedar.sedarplus.parsers import map_company_record, map_document_record, parse_csv_export
+from sedar.sedarplus.profiles import search_profiles
 from sedar.sedarplus.search import search_documents
 from sedar.storage.engine import Storage
 
@@ -68,6 +69,28 @@ def sync_issuers_cmd(confirm_authorized: bool, max_pages: int) -> None:
             confirm_authorized=confirm_authorized,
         )
         click.echo(f"Synced {len(rows)} issuers")
+    except ComplianceError as exc:
+        click.echo(str(exc), err=True)
+        sys.exit(1)
+
+
+@main.command("search-profiles")
+@_common_options
+@click.option("--query", default=None, help="Profile name or profile number.")
+@click.option("--max-pages", default=1, show_default=True, type=int)
+def search_profiles_cmd(
+    confirm_authorized: bool,
+    query: str | None,
+    max_pages: int,
+) -> None:
+    """Search SEDAR+ profiles and store metadata."""
+    try:
+        rows = search_profiles(
+            query=query,
+            max_pages=max_pages,
+            confirm_authorized=confirm_authorized,
+        )
+        click.echo(f"Stored {len(rows)} profile records")
     except ComplianceError as exc:
         click.echo(str(exc), err=True)
         sys.exit(1)

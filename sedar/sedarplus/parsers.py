@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 import re
@@ -11,13 +12,24 @@ from urllib.parse import parse_qs, urlparse
 
 from lxml import html
 
-DOCUMENT_ID_RE = re.compile(r"id=([a-f0-9]+)", re.I)
-PROFILE_ID_RE = re.compile(r"records/profile\.html\?id=([a-f0-9]+)", re.I)
+DOCUMENT_ID_RE = re.compile(r"document(?:\.html)?(?:\?id=|/)([a-z0-9_-]+)", re.I)
+PROFILE_ID_RE = re.compile(r"profile(?:\.html)?(?:\?id=|/)([a-z0-9_-]+)", re.I)
+
+
+def _stable_unknown_id(prefix: str, row: dict[str, Any]) -> str:
+    payload = json.dumps(row, sort_keys=True, default=str)
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+    return f"{prefix}-{digest}"
 
 
 def extract_document_id(url: str) -> str | None:
     if not url:
         return None
+    parsed = urlparse(url)
+    if "document" in parsed.path.lower():
+        values = parse_qs(parsed.query).get("id")
+        if values:
+            return values[0]
     match = DOCUMENT_ID_RE.search(url)
     return match.group(1) if match else None
 
@@ -25,13 +37,13 @@ def extract_document_id(url: str) -> str | None:
 def extract_profile_id(url: str) -> str | None:
     if not url:
         return None
-    match = PROFILE_ID_RE.search(url)
-    if match:
-        return match.group(1)
     parsed = urlparse(url)
-    query = parse_qs(parsed.query)
-    values = query.get("id")
-    return values[0] if values else None
+    if "profile" in parsed.path.lower():
+        values = parse_qs(parsed.query).get("id")
+        if values:
+            return values[0]
+    match = PROFILE_ID_RE.search(url)
+    return match.group(1) if match else None
 
 
 def normalize_header(name: str) -> str:
@@ -61,14 +73,19 @@ def parse_results_table(page_html: str) -> list[dict[str, Any]]:
                 continue
             values = [cell.text_content().strip() for cell in cells]
             if len(values) < len(headers):
-                headers = headers[: len(values)]
+                row_headers = headers[: len(values)]
             elif len(values) > len(headers):
                 values = values[: len(headers)]
-            record = dict(zip(headers, values))
+                row_headers = headers
+            else:
+                row_headers = headers
+            record = dict(zip(row_headers, values))
             links = row.xpath(".//a[@href]")
             if links:
                 hrefs = [link.get("href", "") for link in links]
+                texts = [link.text_content().strip() for link in links]
                 record["links"] = hrefs
+                record["link_texts"] = texts
                 for href in hrefs:
                     doc_id = extract_document_id(href)
                     if doc_id:
@@ -112,10 +129,12 @@ def map_document_record(row: dict[str, Any]) -> dict[str, Any]:
         or row.get("issuer")
         or row.get("company")
         or row.get("profile_name")
+        or row.get("profile_name_or_number")
         or ""
     )
     document_name = (
-        row.get("document_name")
+        row.get("document_type")
+        or row.get("document_name")
         or row.get("document")
         or row.get("filing_type")
         or row.get("type")
@@ -123,33 +142,76 @@ def map_document_record(row: dict[str, Any]) -> dict[str, Any]:
     )
     submitted = (
         row.get("submitted_date")
+        or row.get("date_submitted")
+        or row.get("filed_date")
+        or row.get("date_filed")
         or row.get("date")
         or row.get("submission_date")
         or ""
     )
-    document_id = row.get("document_id") or extract_document_id(row.get("download_url", ""))
+    download_url = (
+        row.get("download_url")
+        or row.get("generated_url")
+        or row.get("document_url")
+        or row.get("url")
+        or row.get("link")
+        or ""
+    )
+    document_id = row.get("document_id") or extract_document_id(download_url)
     if not document_id:
         document_id = extract_document_id(" ".join(row.get("links", [])))
     return {
-        "document_id": document_id or f"unknown-{hash(json.dumps(row, sort_keys=True))}",
+        "document_id": document_id or _stable_unknown_id("unknown-document", row),
         "profile_id": row.get("profile_id") or "",
         "document_name": document_name,
         "submitted_date": submitted,
         "jurisdiction": row.get("jurisdiction", ""),
         "file_size": row.get("file_size") or row.get("size") or "",
-        "download_url": row.get("download_url") or "",
+        "download_url": download_url,
         "company_name": profile,
         "raw_json": row.get("raw_json") or json.dumps(row),
     }
 
 
 def map_company_record(row: dict[str, Any]) -> dict[str, Any]:
-    profile_id = row.get("profile_id") or extract_profile_id(row.get("profile_url", ""))
+    profile_url = (
+        row.get("profile_url")
+        or row.get("url")
+        or row.get("link")
+        or " ".join(row.get("links", []))
+    )
+    profile_number = row.get("profile_number") or row.get("profile_no") or row.get("number") or ""
+    profile_id = row.get("profile_id") or extract_profile_id(profile_url)
+    jurisdiction = (
+        row.get("principal_jurisdiction")
+        or row.get("jurisdiction")
+        or row.get("reporting_jurisdiction")
+        or ""
+    )
     return {
-        "profile_id": profile_id or row.get("profile_number") or row.get("name", "unknown"),
-        "profile_number": row.get("profile_number") or row.get("profile_no") or "",
-        "legal_name": row.get("legal_name") or row.get("name") or row.get("issuer") or "",
-        "jurisdiction": row.get("jurisdiction") or "",
+        "profile_id": profile_id or profile_number or _stable_unknown_id("unknown-profile", row),
+        "profile_number": profile_number,
+        "legal_name": (
+            row.get("legal_name")
+            or row.get("profile_name")
+            or row.get("name")
+            or row.get("issuer")
+            or ""
+        ),
+        "jurisdiction": jurisdiction,
+        "principal_jurisdiction": row.get("principal_jurisdiction") or "",
+        "reporting_jurisdictions": (
+            row.get("reporting_jurisdictions_determined_by_regulator")
+            or row.get("reporting_jurisdictions")
+            or ""
+        ),
+        "profile_type": row.get("profile_type") or row.get("type") or "",
         "status": row.get("status") or "",
+        "in_default": row.get("in_default") or "",
+        "active_cease_trade_order": (
+            row.get("active_cease_trade_order_ban_trading_by_ban_trading_of")
+            or row.get("active_cease_trade_order")
+            or ""
+        ),
         "raw_json": row.get("raw_json") or json.dumps(row),
     }

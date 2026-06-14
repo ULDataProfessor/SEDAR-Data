@@ -5,7 +5,9 @@ import pytest
 from sedar.compliance import (
     BotChallengeError,
     ComplianceError,
+    SEDARUnavailableError,
     detect_bot_challenge,
+    detect_unavailable,
     enforce_download_limit,
     enforce_profile_limit,
     require_live_access,
@@ -13,6 +15,8 @@ from sedar.compliance import (
 )
 from sedar.config import Settings, reset_settings
 from sedar.sedarplus.parsers import (
+    extract_document_id,
+    extract_profile_id,
     map_company_record,
     map_document_record,
     parse_csv_export,
@@ -87,11 +91,45 @@ def test_detect_bot_challenge():
         detect_bot_challenge("Radware Captcha Page", "https://example.com")
 
 
+def test_detect_unavailable():
+    with pytest.raises(SEDARUnavailableError):
+        detect_unavailable(
+            "SEDAR+ is temporarily unavailable due to planned system maintenance.",
+            "https://www.sedarplus.ca",
+        )
+
+
+def test_service_link_uses_current_sedar_apps():
+    cfg = Settings()
+
+    assert (
+        cfg.service_link("searchIndustryParticipant")
+        == "https://www.sedarplus.ca/csa-party/service/create.html"
+        "?_locale=en&service=searchIndustryParticipant&targetAppCode=csa-party"
+    )
+    assert (
+        cfg.service_link("searchCeaseTradeOrders")
+        == "https://www.sedarplus.ca/csa-order/service/create.html"
+        "?_locale=en&service=searchCeaseTradeOrders&targetAppCode=csa-order"
+    )
+
+
 def test_parse_results_table():
     html = (FIXTURES / "search_results.html").read_text()
     rows = parse_results_table(html)
     assert len(rows) == 2
     assert rows[0]["document_id"] == "abc123def456"
+    assert "profile_id" not in rows[0]
+
+
+def test_extract_ids_require_matching_path():
+    document_url = "https://www.sedarplus.ca/csa-party/records/document.html?id=abc123"
+    profile_url = "https://www.sedarplus.ca/csa-party/records/profile.html?id=prof456"
+
+    assert extract_document_id(document_url) == "abc123"
+    assert extract_profile_id(document_url) is None
+    assert extract_profile_id(profile_url) == "prof456"
+    assert extract_document_id(profile_url) is None
 
 
 def test_parse_csv_export_documents():
@@ -109,6 +147,27 @@ def test_parse_csv_export_issuers():
     mapped = map_company_record(rows[0])
     assert mapped["legal_name"] == "Example Corp."
     assert mapped["profile_number"] == "00001234"
+
+
+def test_map_reporting_issuer_fields():
+    mapped = map_company_record(
+        {
+            "name": "Example Fund",
+            "number": "000037625",
+            "reporting_jurisdictions_determined_by_regulator": "AB, ON",
+            "principal_jurisdiction": "ON",
+            "type": "Investment fund",
+            "in_default": "No",
+            "active_cease_trade_order_ban_trading_by_ban_trading_of": "No",
+        }
+    )
+
+    assert mapped["profile_number"] == "000037625"
+    assert mapped["jurisdiction"] == "ON"
+    assert mapped["reporting_jurisdictions"] == "AB, ON"
+    assert mapped["profile_type"] == "Investment fund"
+    assert mapped["in_default"] == "No"
+    assert mapped["active_cease_trade_order"] == "No"
 
 
 def test_storage_upsert(settings):
