@@ -71,6 +71,18 @@ sedar import-csv exports/issuers.csv --kind issuers
 | `sedar import-csv` | Import manual SEDAR+ CSV export |
 | `sedar legacy-scrape` | Historical legacy scraper (deprecated) |
 
+### Command Options
+
+```text
+sedar sync-issuers [--max-pages N] --confirm-authorized
+sedar search-profiles [--query TEXT] [--max-pages N] --confirm-authorized
+sedar search-docs [--profile TEXT] [--query TEXT] [--from-date YYYY-MM-DD] [--to-date YYYY-MM-DD] [--max-pages N] --confirm-authorized
+sedar download [--limit N] --confirm-authorized
+sedar import-csv CSV_PATH --kind documents|issuers
+```
+
+Use `sedar COMMAND --help` for the exact option list installed in your environment.
+
 ### Manual CSV Workflow
 
 Use this path when you do not have written permission for live automation, or when
@@ -108,7 +120,7 @@ sedar/
   config.py              # Settings
   compliance.py          # Authorization and rate limits
   storage/               # PostgreSQL / SQLite via dataset
-  sedarplus/             # Playwright client (search, download, issuers)
+  sedarplus/             # Playwright client (profiles, documents, issuers, downloads)
   legacy/                # Pre-SEDAR+ scraper and CAPTCHA helper
 docs/                    # Data access guidance and authorization checklist
 tests/                   # Fixture-based unit tests
@@ -137,6 +149,19 @@ Use SQLite for local development:
 DATABASE_URL=sqlite:///sedar.db
 ```
 
+## Generated Files
+
+The tool writes local runtime state outside the source package:
+
+- `sedar.db` when using the default SQLite database.
+- `filings/` for downloaded documents.
+- `.sedar/browser_state/state.json` for persisted Playwright browser state.
+- Browser downloads in temporary Playwright directories before files are saved into
+  `SEDAR_DOWNLOAD_DIR`.
+
+Do not commit authorization documents, browser state, downloaded filings, or local
+databases unless your project policy explicitly allows it.
+
 ## Legacy Code
 
 The original legacy `sedar.com` scraper lives in `sedar/legacy/`. Root `scrape.py`
@@ -153,6 +178,17 @@ July 2023 and are not maintained for current use.
 - SEDAR+ maintenance pages and bot challenges are detected and surfaced as compliance errors
 - **Radware bot protection** may require headed browser and manual CAPTCHA
 - **No official SEDAR+ API** — UI automation may break when the site changes
+
+## Troubleshooting
+
+| Symptom | Likely cause | Action |
+|---------|--------------|--------|
+| `Live SEDAR+ access requires explicit authorization` | `--confirm-authorized` was omitted and `SEDAR_CONFIRM_AUTHORIZED` is false | Confirm written permission, then pass `--confirm-authorized` or set `SEDAR_CONFIRM_AUTHORIZED=1` |
+| `Authorization file not found` | `SEDAR_AUTHORIZATION_FILE` points to a missing file | Set it to the written authorization document |
+| `SEDAR+ is reporting scheduled maintenance` | The public site is unavailable | Retry after SEDAR+ maintenance ends |
+| `SEDAR+ bot protection detected` | Radware or CAPTCHA blocked the browser session | Set `SEDAR_HEADLESS=false`, complete the browser challenge manually, then retry |
+| `Requested N documents exceeds SEDAR+ batch limit` | `--limit` is above `SEDAR_MAX_DOWNLOAD_BATCH` | Keep download batches at 30 or lower unless your authorization allows stricter configured behavior |
+| Empty search import | CSV headers or UI table columns were not recognized | Keep the raw export and add a parser fixture before changing live automation |
 
 ## Development
 

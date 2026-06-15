@@ -150,6 +150,40 @@ Run with `SEDAR_HEADLESS=false` if a manual browser challenge must be completed.
 If SEDAR+ reports scheduled maintenance or temporary unavailability, retry after
 the public site is available.
 
+### Command behavior and local state
+
+The CLI records each live run in the `sync_run` table with a mode, start time,
+finish time, record count, and error string. Search commands upsert normalized
+metadata into local tables:
+
+- `sedar search-profiles` stores profile records in `company`.
+- `sedar sync-issuers` stores reporting issuer records in `company`.
+- `sedar search-docs` stores document metadata in `filing`.
+- `sedar download` reads pending `filing` records with a `download_url`, writes
+  files under `SEDAR_DOWNLOAD_DIR/{profile_id}/{document_id}/`, and stores local
+  path and SHA-256 checksum metadata.
+
+Playwright browser state is persisted under `SEDAR_BROWSER_STATE_DIR`. This can
+reduce repeated session setup, but it may contain cookies or other browser state.
+Treat it as local runtime data.
+
+### Failure handling
+
+The compliance layer fails closed:
+
+- Missing or empty authorization documents stop live commands before browser
+  automation starts.
+- Missing runtime confirmation stops live commands even if configuration exists.
+- Requests over the configured download batch limit or profile-search limit stop
+  before work begins.
+- SEDAR+ maintenance pages raise an unavailable error instead of waiting for
+  selectors that will never appear.
+- Bot challenge markers raise a bot challenge error and recommend a headed browser
+  session.
+
+Keep raw CSV exports and representative HTML/table fixtures for any new SEDAR+
+screen shape before changing parser behavior.
+
 ## Compliant Paths Forward
 
 Use one of these paths for current work:
